@@ -12,10 +12,10 @@
 #include <Wire.h>
 #define ADS1015_REG_CONFIG_DR_3300SPS (0x00C0);
 
-Adafruit_ADS1115 ads; 
+Adafruit_ADS1115 ads;
 DS3231 clock;
 RTCDateTime dt;
- 
+
 const int sampleWindow = 50; // Sample window width in mS (50 mS = 20Hz)
 const int wakeUpPin = 2;
 const int XBee_wake = 9; // Arduino pin used to sleep the XBee
@@ -32,11 +32,11 @@ String csv_separator = ",";
 
 void wakeUp()
 {
-  
+
 }
 
 
-void setup() 
+void setup()
 {
   Serial.begin(9600);
 
@@ -55,27 +55,29 @@ void setup()
   clock.clearAlarm1();
   clock.clearAlarm2();
   clock.setAlarm1(0, 0, 0, 20, DS3231_MATCH_S);
-  
+
   pinMode(wakeUpPin, INPUT);
   pinMode(13, OUTPUT);
 }
- 
- 
-void loop() 
+
+
+void loop()
 {
+  pinMode(XBee_wake, INPUT); // put pin in a high impedence state
+  digitalWrite(XBee_wake, HIGH);
+  
   //Get the current time to see if we should carry on looping
   dt = clock.getDateTime();
   start_time = dt.unixtime;
-  
+
   int z = 0;
 
   //Stop looping when it has been an hour
-  while(z < 60)
+  while (z < 1)
   {
-    
     int high = 0;
     //Take 20 readings and store the loudest one
-    for (int x = 0; x < 20 ;x++)
+    for (int x = 0; x < 20 ; x++)
     {
       reading = getAmplitude();
       if (reading > high)
@@ -90,16 +92,16 @@ void loop()
     value_store[z] = high;
 
     z++;
-    
+
     //Set interrupt on signal from clock
     attachInterrupt(0, wakeUp, FALLING);
-    
+
     // Enter power down, wake when clock signals
-    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF); 
-    
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
+
     // Disable external pin interrupt on wake up pin.
-    detachInterrupt(0); 
-  
+    detachInterrupt(0);
+
     //Clear the alarm so it fires future interrupts
     clock.clearAlarm1();
   }
@@ -107,12 +109,15 @@ void loop()
   // wake up the XBee
   pinMode(XBee_wake, OUTPUT);
   digitalWrite(XBee_wake, LOW);
-  
-  for(int i = 0; i < 60; i++)
+  delay(1000);
+  for (int i = 0; i < 60; i++)
   {
     Serial.print(time_store[i]);
+    delay(20);
     Serial.print(",");
+    delay(20);
     Serial.println(value_store[i]);
+    delay(20);
   }
 
   //Print battery voltage
@@ -121,40 +126,40 @@ void loop()
 
   Serial.print("batt,");
   Serial.println(true_voltage);
+  Serial.print("!");
 
   //MMake sure everything is written out
   Serial.flush();
 
-  pinMode(XBee_wake, INPUT); // put pin in a high impedence state
-  digitalWrite(XBee_wake, HIGH);
-    current_time = 0;
+  
+  current_time = 0;
 }
 
 
-int getAmplitude() 
+int getAmplitude()
 {
   int signalMax = -32767;
   int signalMin = 32767;
-  unsigned long startMillis= millis();  // Start of sample window
+  unsigned long startMillis = millis(); // Start of sample window
   long sample;
-  // collect data for 50 
-   while (millis() - startMillis < sampleWindow)
-   {
-      sample = ads.readADC_Differential_0_1(); 
-      if (sample < 32767 && sample > -32767)  // toss out spurious readings
+  // collect data for 50
+  while (millis() - startMillis < sampleWindow)
+  {
+    sample = ads.readADC_Differential_0_1();
+    if (sample < 32767 && sample > -32767)  // toss out spurious readings
+    {
+      if (sample > signalMax)
       {
-         if (sample > signalMax)
-         {
-            signalMax = sample;  // save just the max levels
-         }
-         else if (sample < signalMin)
-         {
-            signalMin = sample;  // save just the min levels
-         }
+        signalMax = sample;  // save just the max levels
       }
-   }
+      else if (sample < signalMin)
+      {
+        signalMin = sample;  // save just the min levels
+      }
+    }
+  }
 
 
- 
-   return signalMax - signalMin;  // max - min = peak-peak amplitude
+
+  return signalMax - signalMin;  // max - min = peak-peak amplitude
 }
